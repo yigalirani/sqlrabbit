@@ -1,0 +1,39 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html><head>
+ <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+ <link rel="stylesheet" href="sql.css" type="text/css" media="screen" >   
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+    <script type='text/javascript' src='script.js'></script>
+<title>SQL Rabbit - #title</title></head>
+<body>
+            <div class=connection>
+            <a href=index.php><img src=logo.png></a><b>server:</b> #server    <b>user</b>: #user (<a href=index.php?action=logout>logout</a>)
+        </div><br>
+        <div class=navbar>#navbar</div><br>
+        
+        <div class=about><table>
+                {<tr><td class=about_title>About this view</td><td >#about</td><tr>}
+                {<tr><td class=about_title>View Options</td><td >#view_options</td><tr>}
+                {<tr><td class=about_title>Query</td><td ><span class=sql>#query</span> (<a href=index.php?action=query&database=%database&query=%query>Edit</a>)</td><tr>}
+{<tr><td class=about_title>Quer11y</td><td>                   
+                <div class=query>
+<form action=index.php method="get" type="post">
+<textarea name="query" cols="60" rows="5">#querytext</textarea><br>
+<input name="action" type="submit" value="query"/>
+<input name="database" type="hidden" value='#database'/>
+</form>
+</div>    
+</td></tr>}
+                {<tr><td class=about_title>Query decoration</td><td ><span class=limit>#query_decoration</span> </td><tr>}                   
+            
+            </table>
+            {<div class='error'>#query_error</div>}
+            {<div class='ok'>#ok</div>}
+        </div><br>
+        
+        
+        <div class='nextprev'>#nextprev</div>
+        <div class=query_result>#table</div>
+        <div class='nextprev'>#nextprev</div>
+</body>
+</html>
