@@ -293,5 +293,6 @@ function print_title($s) {
 fr_route_pre('database', 'database','start');//action is detairmened by prefix. action and prefix are the same
 fr_route_pre('table', 'database/table','start');
 fr_route_pre('table_schema', 'database/table','start');
+fr_route_pre('databases', null,'start');
 fr_run('databases');
 ?>

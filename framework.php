@@ -81,7 +81,7 @@ function parse_block(&$tokens,$is_optional){
 function clear_empty_strings($tokens_paded){
     $tokens=array();
     foreach($tokens_paded as $token) //overcoming a quirq in preg_match_all
-        if ($token!="")
+        if ($token!="" && $token!=null)
             array_push ($tokens, $token); 
     return $tokens;
 }
@@ -209,13 +209,17 @@ function fr_get_last_error() {
     return end(explode("):", $ans));
 }
 function fr_run($default_action){
+    $orig_request_count=count($_REQUEST);
     if (!isset($_REQUEST['action']))
         $_REQUEST['action']=$default_action;
     set_error_handler("capture_error", E_WARNING); 
+
     do_the_routing();
     $action='on_'.fr_param('action','default');
     try{
         fr_push_template('template.htm');
+        if ($orig_request_count)
+            fr_placeholder_set ('meta','<meta name="robots" content="noindex" />');
         $action();
     } catch (Exception $e) {
         print ("<pre>$e<?pre>");
@@ -351,6 +355,7 @@ function back_routing(&$request){
     $optional=$action_details['optional'];
     if ($optional)
         array_push($ans,get_index_unset($request,$optional));
+    $ans=clear_empty_strings($ans);
     $path=join('/',$ans);        
     $ans=$script_path."/".$path;
     if (count($request))
