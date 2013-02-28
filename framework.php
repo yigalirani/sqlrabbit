@@ -27,9 +27,30 @@ class Tokens{
         $this->tokens=$tokens;
     }
     function read_token(){
+        $ans=$this->look_ahead();
+        $this->head++;
+        return $ans;
+    }
+    function look_ahead(){
         if ($this->head >= count($this->tokens))
             return null;
-        return $this->tokens[$this->head++];
+        return $this->tokens[$this->head];
+    }
+}
+function parse_href(&$tokens){
+    $ans=array();
+    while(true){
+        $name=$tokens->read_token();    
+        if ($name==']')
+            return $ans;
+        if ($tokens->read_token()!='='){
+            do_throw('syntax error in template');
+        }
+        $value=$tokens->read_token();    
+        $ans[$name]=$value;
+        if ($tokens->look_ahead()=='&'){
+            $tokens->read_token();
+        }
     }
 }
 function parse_block(&$tokens,$is_optional){
@@ -44,6 +65,10 @@ function parse_block(&$tokens,$is_optional){
                 do_throw('empty template');
             return $ans;
         }        
+        if ($token=='['){
+            array_push($ans->elements,parse_href($tokens));
+            continue;
+        }
         if ($token=='{'){
             array_push($ans->elements,parse_block($tokens,true));
             continue;
@@ -53,25 +78,39 @@ function parse_block(&$tokens,$is_optional){
         array_push($ans->elements,$token);                
     }   
 }
-function parse_template($template){
-    /*split
-     */
-    $content=file_get_contents($template);
-    preg_match_all('/[^\{\}#%]*|#\w*|%\w*|\{|\}/', $content, $matches, PREG_PATTERN_ORDER);
-    $tokens_paded=$matches[0];
+function clear_empty_strings($tokens_paded){
     $tokens=array();
     foreach($tokens_paded as $token) //overcoming a quirq in preg_match_all
         if ($token!="")
             array_push ($tokens, $token); 
+    return $tokens;
+}
+function parse_template($template){
+    /*split
+     */
+    $content=file_get_contents($template);
+    $content=str_replace('./', '#script_path/', $content);
+    preg_match_all('/[^\{\}#\[\]\=\&]*|#\w*|\{|\}|\[|\]|\&|\=/', $content, $matches, PREG_PATTERN_ORDER);
+    $tokens=clear_empty_strings($matches[0]);
     return parse_block(new Tokens($tokens),false);
 }
 function is_placeaholder($element){
     $prefix=substr($element, 0,1);
     return is_string($element) && $prefix=='#';
 }
-function is_placeaholder_url_encoded($element){
-    $prefix=substr($element, 0,1);
-    return is_string($element) && $prefix=='%';
+function process_href($frame,$href,$is_optional){
+    $ans=array();
+    foreach($href as $key=>$value){
+        if (is_placeaholder($value)){
+            $value=get_index($frame->placeholders,  substr($value,1));
+            if (!$value && $is_optional){
+                return "";
+            }
+           // $value=urlencode($value);
+        }
+        $ans[$key]=$value;
+    }
+    return 'href='.back_routing($ans);        
 }
 function process_block($frame,$block){
     $ans=array();
@@ -84,16 +123,15 @@ function process_block($frame,$block){
             array_push($ans,$value);
             continue;                
         }
-        if (is_placeaholder_url_encoded($element)){
-            $value=get_index($frame->placeholders,  substr($element,1));
-            if (!$value && $block->is_optional){
-                return "";
-            }
-            array_push($ans,  urlencode($value));
-            continue;                
-        }
         if (is_string($element)){
             array_push($ans,$element);
+            continue;
+        }
+        if (is_array($element)){
+            $href_result=process_href($frame,$element,$block->is_optional);
+            if (!$href_result)//by thoeram, the block is optional
+                return "";  
+            array_push($ans,$href_result);
             continue;
         }
         //if reached here than it must be a block todo assert that?
@@ -107,6 +145,8 @@ function fr_pop_template(){
     if (count($template_stack)==0)
         return false;
     private_flush_current_placeholder();
+    $script_path=dirname($_SERVER['SCRIPT_NAME']);
+    fr_placeholder_set('script_path',$script_path);
     $frame=array_pop($template_stack);
     
     $top_block=parse_template($frame->template);
@@ -168,8 +208,11 @@ function fr_get_last_error() {
     $last_error = null;
     return end(explode("):", $ans));
 }
-function fr_run(){
+function fr_run($default_action){
+    if (!isset($_REQUEST['action']))
+        $_REQUEST['action']=$default_action;
     set_error_handler("capture_error", E_WARNING); 
+    do_the_routing();
     $action='on_'.fr_param('action','default');
     try{
         fr_push_template('template.htm');
@@ -179,10 +222,10 @@ function fr_run(){
     }
     while(fr_pop_template());
 }
-function toggle($value,$options){
+function fr_toggle($value,$options){
     return $value==$options[0]?$options[1]:$options[0];
 }
-function compare($a,$b,$sort,$dir){
+function fr_compare($a,$b,$sort,$dir){
     $dir=($dir=="desc"?-1:1);
     $a_val=$a[$sort];
     $b_val=$b[$sort];
@@ -192,21 +235,18 @@ function compare($a,$b,$sort,$dir){
         return $dir;
     return -1*$dir;
 }
-function make_link($content,$values,$copy=array()){
-    $href=make_href2($values,$copy);
+function fr_link($content,$values,$copy=array()){
+    $href=fr_href($values,$copy);
     return "<a href=$href>$content</a>";    
 }
-function make_href2($replace,$copy_array=array()) {
+function fr_href($replace,$copy_array=array()) {
     $request=array() ;
     foreach ($copy_array as $key)
         if (isset($_REQUEST[$key]))
             $request[$key]=$_REQUEST[$key];
     foreach ($replace as $key => $value) 
         $request[$key]=$value;
-    return "index.php?".http_build_query($request);
-}
-function make_href($replace_name, $replace_value,$clear_array=array()) {
-    return make_href2(array($replace_name=>$replace_value),$clear_array);
+    return back_routing($request);
 }
 function fr_placeholder_append($name,$value){
     global $template_stack;
@@ -235,7 +275,7 @@ function fr_placeholder_printo($placeholder){
 function do_throw($message) {
     throw new Exception($message);
 }
-function get_param_one_of($index,$values){
+function fr_get_param_one_of($index,$values){
     $ans=fr_param($index);
     if (array_search($ans,$values))
             return $ans;
@@ -250,7 +290,14 @@ function get_index($array,$key,$default=null){
         return $default;
     return $array[$key];
 }
-function get_cookie($index, $default="") {
+function get_index_unset(&$array,$key,$default=null){
+    if (!isset($array[$key]))
+        return $default;
+    $ans=$array[$key];
+    unset($array[$key]);
+    return $ans;
+}
+function fr_get_cookie($index, $default="") {
     if (!isset($_COOKIE[$index]))
         return $default;
     $ans = trim($_COOKIE[$index]);
@@ -258,7 +305,7 @@ function get_cookie($index, $default="") {
         return $default;
     return $ans;
 }
-function mysqli_fetch_all_alt($res) {
+function fr_mysqli_fetch_all_alt($res) {
     $table = array();
     while (true) {
         $row = mysqli_fetch_assoc($res);
@@ -277,5 +324,70 @@ function fr_placeholder_set_bulk($array){
         fr_placeholder_set($key, $value);        
     }
 }
+$routes=array(); 
+function fr_route_pre($action, $mandatory_params_string="",$optional_param=null){//action is detairmened by prefix. action and prefix are the same
+    global $routes;
+    $mandatory_params=explode('/',$mandatory_params_string);
+    $routes[$action]=array('mandatory'=>$mandatory_params,'optional'=>$optional_param);
+}
+function build_query_if_needed($request){
+    if (count($request)==0)
+        return "";
+    return '?'.http_build_query($request);
+}
+function back_routing(&$request){
+    global $script_path;    
+    global $routes;
+    $action=$request['action'];
+    $action_details=get_index($routes,$action);
+    if (!$action_details){
+        return $script_path.'/index.php'.build_query_if_needed($request);
+    }
+    $ans=array();
+    unset($request['action']);
+    array_push($ans,$action);
+    foreach($action_details['mandatory'] as $param)
+        array_push($ans,get_index_unset($request,$param));
+    $optional=$action_details['optional'];
+    if ($optional)
+        array_push($ans,get_index_unset($request,$optional));
+    $path=join('/',$ans);        
+    $ans=$script_path."/".$path;
+    if (count($request))
+        $ans.=build_query_if_needed($request);
+    return $ans;
+}
+
+function do_the_routing(){
+    global $script_path;
+    global $routes;
+    $script_path=dirname($_SERVER['SCRIPT_NAME']);
+    if ($script_path=='\\')
+        $script_path="";//work around bug
+    $uri=$_SERVER['REQUEST_URI'];
+    $pat='#^'.$script_path.'([^\?]*)#';
+    preg_match_all($pat, $uri, $matches, PREG_PATTERN_ORDER);
+    $path=$matches[1][0];
+    $path_array=clear_empty_strings(explode("/", $path));
+    var_dump($path);
+    var_dump($path_array);   
+    if (count($path_array)==0)
+        return;
+    $action_details=get_index($routes,$path_array[0]);
+    if (!$action_details)
+        return;
+    $mandatory_params=$action_details['mandatory'];
+    if (count($mandatory_params)>count($path_array)+1)
+        return;
+    $_REQUEST['action']=$path_array[0];
+    $i=1;
+    foreach($mandatory_params as $param){
+        $_REQUEST[$param]=$path_array[$i++];
+    }
+    $optional_param=$action_details['optional'];
+    if (!optional_param||count($path_array)<count($mandatory_params)+2)
+        return;
+    $_REQUEST[$optional_param]=$path_array[$i];
+  }
 
 ?>
