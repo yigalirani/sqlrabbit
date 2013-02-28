@@ -201,7 +201,8 @@ function print_sort_title($s) {
         $dir = fr_get_param_one_of("dir", $dir_values);
         $other_dir = fr_toggle($dir, $dir_values);
         $href = fr_href(array('dir'=>$other_dir), $nav_copy_fields);
-        $img = "<img src=$dir.png>";
+        global $script_path;
+        $img = "<img src=$script_path/$dir.png>";
         print("<td class=heading id=$s><a href=$href>$s  $img</a></td>\n");
     } else {
         $link = fr_link($s, array('sort' => $s, 'dir' => 'asc'), $nav_copy_fields);
