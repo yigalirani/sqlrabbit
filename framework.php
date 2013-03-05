@@ -1,6 +1,8 @@
 <?php
 $last_error = null;
 $template_stack=array();
+$the_default_action=null;
+include "../mc2/classTextile.php"; # adjust paths if needed.
 class TemplateFrame{
     public $template; //must be a block
     public $current_placeholder;
@@ -53,6 +55,12 @@ function parse_href(&$tokens){
         }
     }
 }
+function fr_td($content,$class=null){
+    if ($class)
+        print("<td class=$class>$content</td>");
+    else
+        print("<td>$content</td>");
+}
 function parse_block(&$tokens,$is_optional){
     $ans=new Block();
     $ans->is_optional=$is_optional;
@@ -103,9 +111,9 @@ function process_href($frame,$href,$is_optional){
     foreach($href as $key=>$value){
         if (is_placeaholder($value)){
             $value=get_index($frame->placeholders,  substr($value,1));
-            if (!$value && $is_optional){
-                return "";
-            }
+            //if (!$value && $is_optional){
+            //    return "";
+            //}
            // $value=urlencode($value);
         }
         $ans[$key]=$value;
@@ -170,10 +178,13 @@ function fr_exit(){
     throw new Exception('exit');
 }
 function fr_get_last_error_sqli($conn){
-    return fr_get_last_error() . mysqli_error($conn);
+    $sqlierror="";
+   if ($conn)
+     	$sqlierror=mysqli_error($conn);
+    return fr_get_last_error() . $sqlierror;
 }
-function fr_int_param($name){
-    return intval(fr_param($name,0));    
+function fr_int_param($name,$default=0){
+    return intval(fr_param($name,$default));    
 }
 function fr_mandatory_param($name){
     $ans=fr_param($name,null);
@@ -185,10 +196,7 @@ function fr_override_values(&$a,$b){
     foreach($a as $key=>$value)
         $a[$key]=get_index($b,$key,$value);
 }
-function fr_redirect_and_exit($url){
-    header("Location: $url", true, 303);    
-    die();
-}
+
 function fr_print_template($file_name,$values,$values2){
     fr_override_values($values,$values2);
     fr_push_template($file_name);
@@ -208,7 +216,10 @@ function fr_get_last_error() {
     $last_error = null;
     return end(explode("):", $ans));
 }
+
 function fr_run($default_action){
+    global $the_default_action;
+    $the_default_action=$default_action;
     $orig_request_count=count($_REQUEST);
     if (!isset($_REQUEST['action']))
         $_REQUEST['action']=$default_action;
@@ -218,6 +229,8 @@ function fr_run($default_action){
     $action='on_'.fr_param('action','default');
     try{
         fr_push_template('template.htm');
+        if (function_exists('on_init'))
+            on_init();//make it so that is optional
         if ($orig_request_count)
             fr_placeholder_set ('meta','<meta name="robots" content="noindex" />');
         $action();
@@ -260,7 +273,12 @@ function fr_placeholder_set($name,$value){
     global $template_stack;
     end($template_stack)->placeholders[$name]=$value;//todo: check that the placeholder exists?
 }
-function redirect_and_exit($url="index.php") {
+function fr_redirect_and_exit($action=null,$params=null) {
+    global $the_default_action;
+    if (!$action){
+        $action=$the_default_action;
+    }
+    $url=  fr_href(array('action'=>$action),$params);
     header("Location: $url", true, 303);
     die();
 }
@@ -332,7 +350,10 @@ $routes=array();
 function fr_route_pre($action, $mandatory_params_string="",$optional_param=null){//action is detairmened by prefix. action and prefix are the same
     global $routes;
     $mandatory_params=explode('/',$mandatory_params_string);
+    $mandatory_params=clear_empty_strings($mandatory_params);
     $routes[$action]=array('mandatory'=>$mandatory_params,'optional'=>$optional_param);
+}
+function fr_route_filetype($action,$mandatory_params_string,$filetype){
 }
 function build_query_if_needed($request){
     if (count($request)==0)
@@ -340,6 +361,7 @@ function build_query_if_needed($request){
     return '?'.http_build_query($request);
 }
 function back_routing(&$request){
+    global $the_default_action;
     global $script_path;    
     global $routes;
     $action=$request['action'];
@@ -356,6 +378,8 @@ function back_routing(&$request){
     if ($optional)
         array_push($ans,get_index_unset($request,$optional));
     $ans=clear_empty_strings($ans);
+    if (count($ans)==1 && $ans[0]=$the_default_action && count($request)==0)
+        return $script_path;
     $path=join('/',$ans);        
     $ans=$script_path."/".$path;
     if (count($request))
@@ -394,5 +418,74 @@ function do_the_routing(){
         return;
     $_REQUEST[$optional_param]=$path_array[$i];
   }
-
+function fr_query_one_request($table,$field){
+    return fr_query_one($table,$field,fr_param($field));
+}
+function fr_query_all($table,$id_col=null){
+    global $conn;
+    $res = mysql_query("select * from $table", $conn);
+    $ans = array();
+    if (!$res)
+        return $ans;
+    while ($row = mysql_fetch_array($res, MYSQL_ASSOC)){
+        if ($id_col)
+            $ans[$row[$id_col]] = $row;
+        else 
+            array_push($ans,$row);
+    }
+    return $ans;    
+}
+function fr_query($q,$error_message=null) {
+    $res = mysql_query($q);
+    fr_check_sql_error($res,$error_message);
+    if (!$res)
+        return false;
+    return mysql_fetch_array($res, MYSQL_ASSOC);
+}
+function fr_query_one($table,$field,$value){  
+    $value = mysql_real_escape_string($value);
+    $field=$table.'_'.$field;
+    $query = "select * from mc_$table where $field='$value'";
+    $ans = fr_query($query);
+    return $ans;    
+}
+function fr_placeholder_print_from_row($row,$spec,$table_prefix=null){
+    if ($table_prefix)
+        $table_prefix=$table_prefix.'_';
+    $spec_lines=explode(',',$spec);
+    foreach($spec_lines as $name){
+        fr_placeholder_set($name,get_index($row,$table_prefix.$name));
+    }
+}
+function fr_textile($content){
+    global $textile;
+    if (!isset($textile))
+        $textile=new Textile();
+    return $textile->TextileThis($content);
+ }
+function fr_check_sql_error($res,$error_message){
+    global $conn;
+    if (!$res && $error_message){
+       fr_placeholder_append('tech_error', $error_message.':'.fr_get_last_error_sqli($conn));
+       fr_exit();         
+    }
+}
+function fr_connect($server,$database,$user,$password,$conn_num=1){
+    global $conn;
+    $conn=mysql_pconnect($server, $user, $password);
+    fr_check_sql_error($conn,"connent");
+    $ans = mysql_select_db($database,$conn);
+    fr_check_sql_error($ans,'select db');
+}
+function fr_auto_session($cookie_name,$salt){
+    //turns on the auto session feature using the given params
+}
+function fr_update($table_name, $insert, $where) {
+    $ans = "";
+    ;
+    foreach ($insert as $name => $value)
+        $ans.=",$name='" . mysql_escape_string($value) . "'";
+    $ans = "update $table_name set " . substr($ans, 1) . " where $where";
+    mc_execute($ans);
+}
 ?>

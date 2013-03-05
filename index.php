@@ -25,7 +25,7 @@ function do_connect_ex() {
     fr_placeholder_set('database', fr_param('database'));
     $error = do_connect();
     if ($error != "")
-        fr_redirect_and_exit('index.php?action=login');
+        fr_redirect_and_exit('login');
     fr_placeholder_set_bulk($settings);
     if ($settings['password'] == "")
         fr_placeholder_set('logout_comment', 'logging without password');
@@ -40,15 +40,16 @@ function on_login_submit() {
     fr_override_values($GLOBALS['settings'], $_REQUEST);
     write_cookies();
     $error = do_connect();
-    if (!$error)
-        fr_redirect_and_exit("index.php");
+    if (!$error){
+        fr_redirect_and_exit();
+    }
     fr_replace_template('login_page.htm');
     fr_placeholder_set_bulk($GLOBALS['settings']);
     fr_placeholder_set('error', $error);
 }
 function on_logout() {
     setcookie("settings", "");
-    fr_redirect_and_exit("index.php?action=login");
+    fr_redirect_and_exit("login");
 }
 function do_query($query) {
     $database = fr_param('database');
@@ -162,6 +163,7 @@ function on_query() {
 function on_databases() {
     do_connect_ex();
     fr_placeholder_set('about', 'The table below shows all the databases that are accessible in this server: Click on any database below to browse it');
+    fr_placeholder_set('title', "show databases");
     $query = 'show databases';
     fr_placeholder_set('query', $query);
     print_cached_nav_result($query, null, "decorate_database_name");

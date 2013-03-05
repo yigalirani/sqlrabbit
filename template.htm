@@ -17,12 +17,12 @@
                 {<tr><td class=about_title>About this view</td><td >#about</td><tr>}
                 {<tr><td class=about_title>View Options</td><td >#view_options</td><tr>}
                 {<tr><td class=about_title>Query</td><td ><span class=sql>#query</span> (<a [action=query&database=#database&query=#query]>Edit</a>)</td><tr>}
-{<tr><td class=about_title>Quer11y</td><td>                   
+{<tr><td class=about_title>Query</td><td>                   
                 <div class=query>
 <form action=index.php method="get" type="post">
 <textarea name="query" cols="60" rows="5">#querytext</textarea><br>
 <input name="action" type="submit" value="query"/>
-<input name="database" type="hidden" value='#database'/>
+{<input name="database" type="hidden" value='#database'/>}
 </form>
 </div>    
 </td></tr>}
