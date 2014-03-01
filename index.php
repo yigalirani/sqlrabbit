@@ -4,47 +4,58 @@
  */
 require_once ("framework.php");
 require_once ("settings.php");
-$max_rows = 100;
-$conn = null;
-$nav_copy_fields = array('sort', 'database', 'query', 'table', 'action', 'dir');
+class M{ //Module vars -- all variables that are used in this file are stored here for consise access. 
+    static $max_rows = 100;
+    static $conn = null;
+    static $nav_copy_fields = array('sort', 'database', 'query', 'table', 'action', 'dir');
+    static $settings;
+    function __construct (){
+        SqlRabbitVars::$settings=get_settings();
+    }
+};
 function write_cookies() {
-    setcookie("settings", serialize($GLOBALS['settings']));
+    setcookie("settings", serialize(M::$settings));
 }
 function read_cookies() {
-    fr_override_values($GLOBALS['settings'], unserialize(fr_get_cookie('settings')));
+    $settings=get_settings();
+    fr_override_values($settings, unserialize(fr_get_cookie('settings')));
+    M::$settings=$settings;
+}
+function get_last_error_sqli($conn){
+    $sqlierror="";
+   if ($conn)
+     	$sqlierror=mysqli_error($conn);
+    return fr_get_last_error() . $sqlierror;
 }
 function do_connect() {
-    global $settings;
-    global $conn;
-    $conn = mysqli_connect($settings['server'], $settings['user'], $settings['password']);
-    return fr_get_last_error_sqli($conn);
+    M::$conn = mysqli_connect(M::$settings['server'], M::$settings['user'], M::$settings['password']);
+    return get_last_error_sqli(M::$conn);
 }
 function do_connect_ex() {
-    global $settings;
     read_cookies();
     fr_placeholder_set('database', fr_param('database'));
     $error = do_connect();
     if ($error != "")
         fr_redirect_and_exit('login');
-    fr_placeholder_set_bulk($settings);
-    if ($settings['password'] == "")
+    fr_placeholder_set_bulk(M::$settings);
+    if (M::$settings['password'] == "")
         fr_placeholder_set('logout_comment', 'logging without password');
 }
 function on_login() {
     fr_replace_template("login_page.htm");
     read_cookies();
-    fr_placeholder_set_bulk($GLOBALS['settings']);
+    fr_placeholder_set_bulk(M::$settings);
 }
 function on_login_submit() {
     read_cookies();
-    fr_override_values($GLOBALS['settings'], $_REQUEST);
+    fr_override_values(M::$settings, $_REQUEST);
     write_cookies();
     $error = do_connect();
     if (!$error){
         fr_redirect_and_exit();
     }
     fr_replace_template('login_page.htm');
-    fr_placeholder_set_bulk($GLOBALS['settings']);
+    fr_placeholder_set_bulk(M::$settings);
     fr_placeholder_set('error', $error);
 }
 function on_logout() {
@@ -53,17 +64,16 @@ function on_logout() {
 }
 function do_query($query) {
     $database = fr_param('database');
-    global $conn;
     if ($database != "") {
-        $ans = mysqli_select_db($conn, $database);
+        $ans = mysqli_select_db(M::$conn, $database);
         if (!$ans) {
-            fr_placeholder_set('query_error', "cannot connect to database $database " . fr_get_last_error_sqli($conn));
+            fr_placeholder_set('query_error', "cannot connect to database $database " . get_last_error_sqli(M::$conn));
             fr_exit();
         }
     }
-    $res = mysqli_query($conn, $query);
+    $res = mysqli_query(M::$conn, $query);
     if (!$res) {
-        fr_placeholder_set('query_error', "mysql_query failed " . fr_get_last_error_sqli($conn));
+        fr_placeholder_set('query_error', "mysql_query failed " . get_last_error_sqli(M::$conn));
         fr_exit();
     }
     return $res;
@@ -85,13 +95,12 @@ function print_last_line($num_fields, $no_rows_at_all) {
     print("</b></td>\n");
 }
 function print_table($query) {
-    global $max_rows;
     $start = fr_int_param('start', '0');
     $sort = fr_param("sort");
     $dir = fr_param("dir");
     if ($sort)
         $query_decoration.=" order by $sort $dir ";
-    $query_decoration.=" limit $start,$max_rows";
+    $query_decoration.=" limit $start,".M::$max_rows;
     fr_placeholder_set('query_decoration', $query_decoration);
     $res = do_query($query . $query_decoration); //guratied to return value or throw
     fr_placeholder_printo('table'); //all printouts will be directed to the body
@@ -102,7 +111,7 @@ function print_table($query) {
         print_sort_title(mysqli_fetch_field_direct($res, $i)->name);
     print("</tr>");
     $dont_print_next = false;
-    for ($c = 0; $c < $max_rows; $c++) {
+    for ($c = 0; $c < M::$max_rows; $c++) {
         print("<tr>\n");
         $row = mysqli_fetch_row($res);
         if (!$row) {
@@ -196,23 +205,31 @@ function database_link() {
     return decorate_database_name(fr_param('database'));
 }
 function print_sort_title($s) {
-    global $nav_copy_fields;
     $sort = fr_param("sort");
     if ($sort == $s) {
         $dir_values = array("asc", "desc");
         $dir = fr_get_param_one_of("dir", $dir_values);
         $other_dir = fr_toggle($dir, $dir_values);
-        $href = fr_href(array('dir'=>$other_dir), $nav_copy_fields);
+        $href = fr_href(array('dir'=>$other_dir), M::$nav_copy_fields);
         global $script_path;
         $img = "<img src=$script_path/$dir.png>";
         print("<td class=heading id=$s><a href=$href>$s  $img</a></td>\n");
     } else {
-        $link = fr_link($s, array('sort' => $s, 'dir' => 'asc'), $nav_copy_fields);
+        $link = fr_link($s, array('sort' => $s, 'dir' => 'asc'), M::$nav_copy_fields);
         print("<td class=heading id=$s>$link</td>\n");
     }
 }
+function mysqli_fetch_all_alt($res) {
+    $table = array();
+    while (true) {
+        $row = mysqli_fetch_assoc($res);
+        if (!$row)
+            break;
+        array_push($table, $row);
+    }
+    return $table;
+}
 function print_cached_nav_result($query, $shown_columns, $first_column_decorator) {
-    global $max_rows;
     $res = do_query($query);
     if (!$res)
         return;
@@ -222,7 +239,7 @@ function print_cached_nav_result($query, $shown_columns, $first_column_decorator
     }
     $sort = fr_param("sort");
     $dir = fr_param("dir");
-    $table = fr_mysqli_fetch_all_alt($res); //,MYSQLI_ASSOC);
+    $table = mysqli_fetch_all_alt($res); //,MYSQLI_ASSOC);
     if ($sort) {
         $f = function($a, $b) use ($sort, $dir) {
                     return fr_compare($a, $b, $sort, $dir);
@@ -248,7 +265,7 @@ function print_cached_nav_result($query, $shown_columns, $first_column_decorator
     $start = fr_int_param("start");
     $array_count = count($table);
     $dont_print_next = false;
-    for ($i = $start; $i < $start + $max_rows; $i++) {
+    for ($i = $start; $i < $start + M::$max_rows; $i++) {
         if ($i >= $array_count)
             $row = null;
         else
@@ -276,16 +293,14 @@ function print_cached_nav_result($query, $shown_columns, $first_column_decorator
     print_next_prev($dont_print_next, $start);
 }
 function print_next_prev($dont_print_next, $start) {
-    global $max_rows;
-    global $nav_copy_fields;
     fr_placeholder_printo('nextprev');
-    if ($start >= $max_rows) {
-        print(fr_link('Last', array('start' => $start - $max_rows), $nav_copy_fields));
+    if ($start >= M::$max_rows) {
+        print(fr_link('Last', array('start' => $start - M::$max_rows), M::$nav_copy_fields));
     }else
         print "Last";
     print "&nbsp;&nbsp;&nbsp; |&nbsp;&nbsp;&nbsp";
     if (!$dont_print_next) {
-        print(fr_link('Next', array('start' => $start + $max_rows), $nav_copy_fields));
+        print(fr_link('Next', array('start' => $start + M::$max_rows), M::$nav_copy_fields));
     }else
         print "Next";
 }
