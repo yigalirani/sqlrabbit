@@ -1,7 +1,7 @@
 <?php
 class SF{ 
-    static $routes = [];
-    static $error_list = [];
+    static $routes = array();
+    static $error_list = array();
     static $script_path = null;
     static $the_default_action='';
 };
@@ -159,9 +159,9 @@ function get_parsed_template($template_filename){
     return $parsed_template;
 }
 function fr_route_pre($action, $mandatory_params_string="",$optional_param=null){//action is detairmened by prefix. action and prefix are the same
-    SF::$routes[$action]=['mandatory'=>explode_remove_empty('/',$mandatory_params_string),'optional'=>$optional_param];
+    SF::$routes[$action]=array('mandatory'=>explode_remove_empty('/',$mandatory_params_string),'optional'=>$optional_param);
 }
-function fr_render($template,$params,$params2=[]){
+function fr_render($template,$params,$params2=array()){
     $params=array_replace($params,$params2);
     $parsed_template=get_parsed_template($template);
     $params['script']=SF::$script_path;
@@ -186,7 +186,7 @@ function calc_routing_params($default_action){
     $pat='#^'.$script_path.'([^\?]*)#';
     $num_pat=preg_match_all($pat, $uri, $matches, PREG_PATTERN_ORDER);
     $path=$matches[1][0];
-    $ans=['action'=>$default_action];
+    $ans=array('action'=>$default_action);
     $path_array=explode_remove_empty("/", $path); 
     if (count($path_array)==0)
         return $ans;
@@ -226,12 +226,12 @@ function build_query_if_needed($request){
         return "";
     return '?'.http_build_query($request);
 }
-function fr_link($content,$values,$copy_array=[]){
+function fr_link($content,$values,$copy_array=array()){
     $href=fr_href($values,$copy_array);
     return "<a href=$href>$content</a>";    
 }
-function fr_href($replace,$copy_array=[]) {
-    $request=[] ;
+function fr_href($replace,$copy_array=array()) {
+    $request=array() ;
     foreach ($copy_array as $key) //copy values from the original request
         if (isset($_REQUEST[$key]))
             $request[$key]=$_REQUEST[$key];

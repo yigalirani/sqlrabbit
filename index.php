@@ -98,7 +98,7 @@ function print_last_line($num_fields, $no_rows_at_all) {
     return $ans;
 }
 function print_table($query) {
-    $ans=[];
+    $ans=array();
     $start = fr_int_param('start', '0');
     $sort = fr_param("sort");
     $dir = fr_param("dir");
@@ -242,7 +242,7 @@ function mysqli_fetch_all_alt($res) {
     return $table;
 }
 function print_cached_nav_result($query, $shown_columns, $first_column_decorator) {
-    $ans=[];
+    $ans=array();
     $res = do_query($query,$ans);
     if (!$res)
         return $ans;
