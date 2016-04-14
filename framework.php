@@ -290,6 +290,7 @@ function fr_compare($a,$b,$sort,$dir){
     return -1*$dir;
 }
 function fr_run($default_action){
+    $_REQUEST=array_map("htmlspecialchars", $_REQUEST);
     SF::$script_path=calc_script_path();
     SF::$the_default_action=$default_action;
     set_error_handler("capture_error", E_WARNING|E_NOTICE); 
