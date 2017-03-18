@@ -27,6 +27,9 @@ function get_last_error_sqli($conn){
 }
 function do_connect() {
     M::$conn = mysqli_connect(M::$settings['server'], M::$settings['user'], M::$settings['password']);
+    mysqli_query (M::$conn,"set character_set_client='utf8'"); 
+    mysqli_query (M::$conn,"set character_set_results='utf8'"); 
+    mysqli_query (M::$conn,"set collation_connection='utf8_general_ci'");     
     return get_last_error_sqli(M::$conn);
 }
 function do_connect_ex() {
